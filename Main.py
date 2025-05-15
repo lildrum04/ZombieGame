@@ -11,6 +11,7 @@ WORLD_WIDTH = 3000
 WORLD_HEIGHT = 2000
 SCREEN_WIDTH = screen.get_width()
 SCREEN_HEIGHT = screen.get_height()
+grass_image = pygame.image.load("grass.png").convert()
 
 # Colors
 WHITE = (255, 255, 255)
@@ -93,18 +94,26 @@ class Enemy:
         self.world_y = random.randint(margin, WORLD_HEIGHT - margin)
         self.size = 30
         self.speed = 1.5
+        self.angle = 0
+
+        enemy_image = pygame.image.load("skeleton-attack_0.png").convert_alpha()
+        self.image = pygame.transform.scale(enemy_image, (60,60))
+        self.rotated_image = self.image
 
     def move_toward(self, player):
         dx = player.world_x - self.world_x
         dy = player.world_y - self.world_y
-        angle = math.atan2(dy, dx)
-        self.world_x += self.speed * math.cos(angle)
-        self.world_y += self.speed * math.sin(angle)
+        self.angle = math.atan2(dy, dx)  # Store angle toward player
+        self.world_x += self.speed * math.cos(self.angle)
+        self.world_y += self.speed * math.sin(self.angle)
 
     def draw(self, camera_x, camera_y):
         screen_x = self.world_x - camera_x
         screen_y = self.world_y - camera_y
-        pygame.draw.rect(screen, GREEN, (screen_x - self.size//2, screen_y - self.size//2, self.size, self.size))
+        angle_degrees = -math.degrees(self.angle)  # Adjust if image faces right
+        self.rotated_image = pygame.transform.rotate(self.image, angle_degrees)
+        rect = self.rotated_image.get_rect(center=(screen_x, screen_y))
+        screen.blit(self.rotated_image, rect.topleft)
 
     def rect(self):
         return pygame.Rect(self.world_x - self.size//2, self.world_y - self.size//2, self.size, self.size)
@@ -116,7 +125,7 @@ enemies = [Enemy() for _ in range(5)]
 score = 0
 wave = 1
 wave_start_time = pygame.time.get_ticks()  # Start time for wave change
-wave_delay = 1000  # 1 second delay between waves
+wave_delay = 5000  # 5 seconds delay between waves
 next_wave_triggered = False  # Whether the player manually triggered the next wave
 
 # Main game loop
@@ -154,7 +163,15 @@ while True:
     camera_y = player.world_y - SCREEN_HEIGHT // 2
     player.update_angle(mouse_pos, camera_x, camera_y)
 
-    screen.fill((20, 20, 20))  # Background
+    tile_width = grass_image.get_width()
+    tile_height = grass_image.get_height()
+
+    start_x = camera_x // tile_width * tile_width
+    start_y = camera_y // tile_height * tile_height
+
+    for x in range(start_x, camera_x + SCREEN_WIDTH, tile_width):
+        for y in range(start_y, camera_y + SCREEN_HEIGHT, tile_height):
+            screen.blit(grass_image, (x - camera_x, y - camera_y))
 
     # Draw player
     player.draw(camera_x, camera_y)
@@ -213,12 +230,15 @@ while True:
             # Draw small red circle at the edge pointing to the enemy
             pygame.draw.circle(screen, RED, (indicator_x, indicator_y), 5)
 
-    # Automatically trigger next wave when all enemies are defeated
-    if len(enemies) == 0 and not next_wave_triggered:
-        wave += 1
-        enemies = [Enemy() for _ in range(5 + wave * 2)]  # Increase the number of enemies as wave increases
-        wave_start_time = pygame.time.get_ticks()  # Reset wave start time
-        next_wave_triggered = True  # Mark that the next wave has been triggered
+    # Automatically trigger next wave after a delay
+    if len(enemies) == 0:
+        if not next_wave_triggered:
+            wave_start_time = pygame.time.get_ticks()
+            next_wave_triggered = True
+        elif pygame.time.get_ticks() - wave_start_time >= wave_delay:
+            wave += 1
+            enemies = [Enemy() for _ in range(5 + wave * 2)]  # Increase the number of enemies
+            next_wave_triggered = False  # Reset flag for next automatic wave
 
     # UI
     screen.blit(font.render(f"Score: {score}", True, WHITE), (20, 20))
@@ -233,5 +253,31 @@ while True:
         pygame.display.update()
         pygame.time.wait(2000)  # Wait for 2 seconds before closing
         sys.exit()
+    # --- Minimap ---
+    minimap_width = 200
+    minimap_height = 140
+    minimap_surface = pygame.Surface((minimap_width, minimap_height))
+    minimap_surface.fill((40, 40, 40))  # Background of minimap
+
+    # Border
+    pygame.draw.rect(minimap_surface, WHITE, (0, 0, minimap_width, minimap_height), 2)
+
+    # Scale world to minimap
+    scale_x = minimap_width / WORLD_WIDTH
+    scale_y = minimap_height / WORLD_HEIGHT
+
+    # Draw enemies on minimap
+    for enemy in enemies:
+        mini_x = int(enemy.world_x * scale_x)
+        mini_y = int(enemy.world_y * scale_y)
+        pygame.draw.circle(minimap_surface, GREEN, (mini_x, mini_y), 3)
+
+    # Draw player on minimap
+    mini_player_x = int(player.world_x * scale_x)
+    mini_player_y = int(player.world_y * scale_y)
+    pygame.draw.circle(minimap_surface, BLUE, (mini_player_x, mini_player_y), 4)
+
+    # Position minimap on screen (top-right corner)
+    screen.blit(minimap_surface, (SCREEN_WIDTH - minimap_width - 10, 10))
 
     pygame.display.update()
