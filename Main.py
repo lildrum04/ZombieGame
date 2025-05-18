@@ -13,10 +13,10 @@ SCREEN_HEIGHT = screen.get_height()
 
 grass_image = pygame.image.load("grass.png").convert()
 tree_image = pygame.image.load("finaltree.png").convert_alpha()
-tree_image = pygame.transform.scale(tree_image, (120, 150))  # Adjust size as needed
+tree_image = pygame.transform.scale(tree_image, (120, 150))
 
 rock_image = pygame.image.load("finalrock.png").convert_alpha()
-rock_image = pygame.transform.scale(rock_image, (100, 70))  # Adjust size as needed
+rock_image = pygame.transform.scale(rock_image, (100, 70))
 
 WHITE = (255, 255, 255)
 GREEN = (0, 200, 0)
@@ -35,6 +35,12 @@ class Player:
         original_image = pygame.image.load("survivor-move_rifle_0.png").convert_alpha()
         self.image = pygame.transform.scale(original_image, (60, 60))
         self.rotated_image = self.image
+        self.mag_capacity = 30
+        self.bullets_in_mag = self.mag_capacity
+        self.reserve_ammo = 240
+        self.is_reloading = False
+        self.reload_start_time = 0
+        self.reload_duration = 1500
 
     def move(self, keys):
         dx, dy = 0, 0
@@ -72,12 +78,26 @@ class Player:
         if self.health <= 0:
             self.health = 0
 
+    def reload(self):
+        if self.bullets_in_mag < self.mag_capacity and self.reserve_ammo > 0:
+            self.is_reloading = True
+            self.reload_start_time = pygame.time.get_ticks()
+
+    def update_reload(self):
+        if self.is_reloading:
+            if pygame.time.get_ticks() - self.reload_start_time >= self.reload_duration:
+                needed = self.mag_capacity - self.bullets_in_mag
+                to_reload = min(needed, self.reserve_ammo)
+                self.bullets_in_mag += to_reload
+                self.reserve_ammo -= to_reload
+                self.is_reloading = False
+
 class Bullet:
     def __init__(self, x, y, angle):
         self.world_x = x
         self.world_y = y
         self.angle = angle
-        self.speed = 12
+        self.speed = 40
         self.size = 6
         self.spawn_time = pygame.time.get_ticks()
 
@@ -118,6 +138,8 @@ class Enemy:
         dx = player.world_x - self.world_x
         dy = player.world_y - self.world_y
         angle = math.atan2(dy, dx)
+        self.angle = angle  # <-- THIS LINE FIXES THE FACING DIRECTION
+
         move_x = self.speed * math.cos(angle)
         move_y = self.speed * math.sin(angle)
 
@@ -128,7 +150,7 @@ class Enemy:
             self.world_x += move_x
             self.world_y += move_y
         else:
-            for angle_offset in [math.pi/6, -math.pi/6, math.pi/3, -math.pi/3]:
+            for angle_offset in [math.pi / 6, -math.pi / 6, math.pi / 3, -math.pi / 3]:
                 new_angle = angle + angle_offset
                 alt_move_x = self.speed * math.cos(new_angle)
                 alt_move_y = self.speed * math.sin(new_angle)
@@ -164,7 +186,6 @@ class EnvironmentObject:
         screen_x = self.world_x - camera_x
         screen_y = self.world_y - camera_y
         screen.blit(self.image, (screen_x - self.rect.width // 2, screen_y - self.rect.height // 2))
-
         if debug and self.collision_rect:
             hitbox_screen = pygame.Rect(
                 screen_x + self.collision_rect.x,
@@ -197,13 +218,13 @@ wave_delay = 5000
 next_wave_triggered = False
 environment_objects = []
 
-for _ in range(30):  # Trees
+for _ in range(30):
     x = random.randint(100, WORLD_WIDTH - 100)
     y = random.randint(100, WORLD_HEIGHT - 100)
     trunk_rect = pygame.Rect(-10, 30, 20, 40)
     environment_objects.append(EnvironmentObject(tree_image, x, y, trunk_rect, is_tree=True))
 
-for _ in range(20):  # Rocks
+for _ in range(20):
     x = random.randint(100, WORLD_WIDTH - 100)
     y = random.randint(100, WORLD_HEIGHT - 100)
     rock_rect = pygame.Rect(-50, -30, 100, 70)
@@ -213,24 +234,32 @@ while True:
     clock.tick(60)
     keys = pygame.key.get_pressed()
     mouse_pos = pygame.mouse.get_pos()
+    player.update_reload()
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             sys.exit()
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            mouse_x, mouse_y = pygame.mouse.get_pos()
-            dx = (mouse_x + player.world_x - SCREEN_WIDTH // 2) - player.world_x
-            dy = (mouse_y + player.world_y - SCREEN_HEIGHT // 2) - player.world_y
-            angle = math.atan2(dy, dx)
-            offset = 30
-            bx = player.world_x + math.cos(angle) * offset
-            by = player.world_y + math.sin(angle) * offset
-            bullets.append(Bullet(bx, by, angle))
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_t:
-            wave += 1
-            enemies = [Enemy() for _ in range(5 + wave * 2)]
-            wave_start_time = pygame.time.get_ticks()
-            next_wave_triggered = True
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and not player.is_reloading:
+            if player.bullets_in_mag > 0:
+                dx = (mouse_pos[0] + player.world_x - SCREEN_WIDTH // 2) - player.world_x
+                dy = (mouse_pos[1] + player.world_y - SCREEN_HEIGHT // 2) - player.world_y
+                angle = math.atan2(dy, dx)
+                offset = 30
+                bx = player.world_x + math.cos(angle) * offset
+                by = player.world_y + math.sin(angle) * offset
+                bullets.append(Bullet(bx, by, angle))
+                player.bullets_in_mag -= 1
+
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_t:
+                wave += 1
+                enemies = [Enemy() for _ in range(5 + wave * 2)]
+                wave_start_time = pygame.time.get_ticks()
+                next_wave_triggered = True
+
+            if event.key == pygame.K_r:
+                player.reload()
 
     player.move(keys)
     camera_x = player.world_x - SCREEN_WIDTH // 2
@@ -244,16 +273,22 @@ while True:
         for y in range(start_y, camera_y + SCREEN_HEIGHT, tile_h):
             screen.blit(grass_image, (x - camera_x, y - camera_y))
 
+    # Rocks behind trees
     for obj in environment_objects:
         if not obj.is_tree:
             obj.draw(camera_x, camera_y)
-        elif obj.world_y < player.world_y:
+
+    # Trees behind player
+    for obj in environment_objects:
+        if obj.is_tree and obj.world_y < player.world_y:
             obj.draw(camera_x, camera_y)
 
     player.draw(camera_x, camera_y)
+
     for enemy in enemies:
         enemy.draw(camera_x, camera_y)
 
+    # Trees in front of player
     for obj in environment_objects:
         if obj.is_tree and obj.world_y >= player.world_y:
             obj.draw(camera_x, camera_y)
@@ -299,6 +334,7 @@ while True:
     screen.blit(font.render(f"Score: {score}", True, WHITE), (20, 20))
     screen.blit(font.render(f"Wave: {wave}", True, WHITE), (20, 60))
     screen.blit(font.render(f"Health: {player.health}", True, BLUE), (20, 100))
+    screen.blit(font.render(f"Ammo: {player.bullets_in_mag} / {player.reserve_ammo}", True, ORANGE), (20, 140))
 
     if player.health <= 0:
         screen.fill((0, 0, 0))
@@ -308,6 +344,7 @@ while True:
         pygame.time.wait(2000)
         sys.exit()
 
+    # Minimap
     minimap_w, minimap_h = 200, 140
     mini = pygame.Surface((minimap_w, minimap_h))
     mini.fill((40, 40, 40))
