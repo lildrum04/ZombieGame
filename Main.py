@@ -34,6 +34,10 @@ ammo_box_pos = (500,300)
 #image of player
 original_image = pygame.image.load("survivor-move_rifle_0.png").convert_alpha()
 
+#image of enemies
+boss_image = pygame.image.load("boss.png").convert_alpha() #boss
+enemy_image = pygame.image.load("skeleton-attack_0.png").convert_alpha() #zombie
+
 #health machine to increase health
 hp_box_image = pygame.image.load("hp_box.png").convert_alpha()
 hp_box_image = pygame.transform.scale(hp_box_image, (110, 130))
@@ -173,7 +177,6 @@ class Enemy:
         self.size = 30
         self.speed = 3
         self.angle = 0
-        enemy_image = pygame.image.load("skeleton-attack_0.png").convert_alpha()
         self.image = pygame.transform.scale(enemy_image, (60,60))
         self.rotated_image = self.image
         self.move_sound_cooldown = 0
@@ -261,10 +264,11 @@ class Boss:
         self.world_x = random.randint(200, WORLD_WIDTH - 200)
         self.world_y = random.randint(200, WORLD_HEIGHT - 200)
         self.size = 80
-        self.health = 300
+        self.base_health = 300
+        self.health = self.base_health + (wave -1) * 100
         self.speed = 1.2
         self.angle = 0
-        boss_image = pygame.image.load("boss.png").convert_alpha()  # Use your boss image
+        boss_image = pygame.image.load("boss.png").convert_alpha()
         self.image = pygame.transform.scale(boss_image, (100, 100))
         self.rotated_image = self.image
 
@@ -439,6 +443,7 @@ while True:
                 wave_start_time = pygame.time.get_ticks()
                 next_wave_triggered = True
 
+
             if event.key == pygame.K_r:
                 player.reload()
 
@@ -463,6 +468,7 @@ while True:
     camera_x = player.world_x - SCREEN_WIDTH // 2
     camera_y = player.world_y - SCREEN_HEIGHT // 2
     player.update_angle(mouse_pos, camera_x, camera_y)
+
 
     # Draw ground
     tile_w, tile_h = grass_image.get_width(), grass_image.get_height()
@@ -613,6 +619,8 @@ while True:
 
     # Apply dark overlay with hole for flashlight
     screen.blit(dark_surface, (0, 0))
+
+
 
     #UI
     screen.blit(font.render(f"Score: {score}", True, WHITE), (20, 20))
